@@ -6,11 +6,12 @@ import os
 import random
 import sys
 import traceback
-from time import sleep
+from time import time, sleep
 
 import requests
 from lxml import etree
 from tqdm import tqdm
+from redisbloom.client import Client
 
 
 class Follow(object):
@@ -27,6 +28,8 @@ class Follow(object):
         self.user_id_list = user_id_list  # 要爬取的微博用户的user_id列表
         self.user_id = ''
         self.follow_list = []  # 存储爬取到的所有关注微博的uri和用户昵称
+        self.fans_list = [] # 存储爬取到的所有粉丝微博的uri和用户昵称
+        rb = Client()
 
     def validate_config(self, config):
         """验证配置是否正确"""
@@ -75,7 +78,9 @@ class Follow(object):
                 im = t.xpath('.//a/@href')[-1]
                 uri = im.split('uid=')[-1].split('&')[0].split('/')[-1]
                 nickname = t.xpath('.//a/text()')[0]
-                if {'uri': uri, 'nickname': nickname} not in self.follow_list:
+                # if {'uri': uri, 'nickname': nickname} not in self.follow_list:
+                if rb.bfExists('uid', uri)
+                    rb.bfAdd('uid', uri)
                     self.follow_list.append({'uri': uri, 'nickname': nickname})
                     print(u'%s %s' % (nickname, uri))
 
@@ -94,10 +99,59 @@ class Follow(object):
                 random_pages = random.randint(1, 5)
 
         print(u'用户关注列表爬取完毕')
+    
+    def get_fans_page_num(self):
+        """获取关注列表页数"""
+        url = "https://weibo.cn/%s/fans" % self.user_id
+        selector = self.deal_html(url)
+        if selector.xpath("//input[@name='mp']") == []:
+            page_num = 1
+        else:
+            page_num = (int)(
+                selector.xpath("//input[@name='mp']")[0].attrib['value'])
+        return page_num
+
+    def get_fans_one_page(self, page):
+        """获取第page页的user_id"""
+        print(u'%s第%d页%s' % ('-' * 30, page, '-' * 30))
+        url = 'https://weibo.cn/%s/fans?page=%d' % (self.user_id, page)
+        selector = self.deal_html(url)
+        table_list = selector.xpath('//table')
+        if (page == 1 and len(table_list) == 0):
+            print(u'cookie无效或提供的user_id无效')
+        else:
+            for t in table_list:
+                im = t.xpath('.//a/@href')[-1]
+                uri = im.split('uid=')[-1].split('&')[0].split('/')[-1]
+                nickname = t.xpath('.//a/text()')[0]
+                #if {'uri': uri, 'nickname': nickname} not in self.fans_list:
+                if rb.bfExists('uid', uri)
+                    rb.bfAdd('uid', uri)
+                    self.fans_list.append({'uri': uri, 'nickname': nickname})
+                    print(u'%s %s' % (nickname, uri))
+
+    def get_fans_list(self):
+        """获取关注用户主页地址"""
+        page_num = self.get_fans_page_num()
+        print(u'用户关注页数：' + str(page_num))
+        page1 = 0
+        random_pages = random.randint(1, 5)
+        for page in tqdm(range(1, page_num + 1), desc=u'关注列表爬取进度'):
+            self.get_fans_one_page(page)
+
+            if page - page1 == random_pages and page < page_num:
+                sleep(random.randint(6, 10))
+                page1 = page
+                random_pages = random.randint(1, 5)
+
+        print(u'用户粉丝列表爬取完毕')
 
     def write_to_txt(self):
-        with open('user_id_list.txt', 'ab') as f:
+        with open('user_id_list'+str(time())+'.txt', 'ab') as f:
             for user in self.follow_list:
+                f.write((user['uri'] + ' ' + user['nickname'] + '\n').encode(
+                    sys.stdout.encoding))
+            for user in self.fans_list:
                 f.write((user['uri'] + ' ' + user['nickname'] + '\n').encode(
                     sys.stdout.encoding))
 
@@ -123,6 +177,10 @@ class Follow(object):
         self.follow_list = []
         self.user_id = user_id
 
+    def check_unique(self, user_id):
+        """查看user_id是否已经保存过"""
+
+
     def start(self):
         """运行爬虫"""
         try:
@@ -130,6 +188,7 @@ class Follow(object):
                 self.initialize_info(user_id)
                 print('*' * 100)
                 self.get_follow_list()  # 爬取微博信息
+                self.get_fans_list()
                 self.write_to_txt()
                 print(u'信息抓取完毕')
                 print('*' * 100)
