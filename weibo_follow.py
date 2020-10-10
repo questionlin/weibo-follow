@@ -17,6 +17,12 @@ from redisbloom.client import Client
 class Follow(object):
     def __init__(self, config):
         """Follow类初始化"""
+        self.rb = Client()
+        self.filter_redis_key = 'uidfilter'
+        self.file_redis_key = 'file_name'
+        file_name = self.rb.get(self.file_redis_key)
+        if file_name:
+            config['user_id_list'] = bytes.decode(file_name)
         self.validate_config(config)
         self.cookie = {'Cookie': config['cookie']}
         user_id_list = config['user_id_list']
@@ -29,7 +35,6 @@ class Follow(object):
         self.user_id = ''
         self.follow_list = []  # 存储爬取到的所有关注微博的uri和用户昵称
         self.fans_list = [] # 存储爬取到的所有粉丝微博的uri和用户昵称
-        rb = Client()
 
     def validate_config(self, config):
         """验证配置是否正确"""
@@ -47,7 +52,7 @@ class Follow(object):
     def deal_html(self, url):
         """处理html"""
         try:
-            html = requests.get(url, cookies=self.cookie).content
+            html = requests.get(url, cookies=self.cookie, verify=False).content
             selector = etree.HTML(html)
             return selector
         except Exception as e:
@@ -79,8 +84,8 @@ class Follow(object):
                 uri = im.split('uid=')[-1].split('&')[0].split('/')[-1]
                 nickname = t.xpath('.//a/text()')[0]
                 # if {'uri': uri, 'nickname': nickname} not in self.follow_list:
-                if rb.bfExists('uid', uri)
-                    rb.bfAdd('uid', uri)
+                if self.rb.bfExists(self.filter_redis_key, uri) == 0:
+                    self.rb.bfAdd(self.filter_redis_key, uri)
                     self.follow_list.append({'uri': uri, 'nickname': nickname})
                     print(u'%s %s' % (nickname, uri))
 
@@ -125,8 +130,8 @@ class Follow(object):
                 uri = im.split('uid=')[-1].split('&')[0].split('/')[-1]
                 nickname = t.xpath('.//a/text()')[0]
                 #if {'uri': uri, 'nickname': nickname} not in self.fans_list:
-                if rb.bfExists('uid', uri)
-                    rb.bfAdd('uid', uri)
+                if self.rb.bfExists(self.filter_redis_key, uri) == 0:
+                    self.rb.bfAdd(self.filter_redis_key, uri)
                     self.fans_list.append({'uri': uri, 'nickname': nickname})
                     print(u'%s %s' % (nickname, uri))
 
@@ -147,13 +152,15 @@ class Follow(object):
         print(u'用户粉丝列表爬取完毕')
 
     def write_to_txt(self):
-        with open('user_id_list'+str(time())+'.txt', 'ab') as f:
+        file_name = 'user_id_list'+str(time())+'.txt'
+        with open(file_name, 'ab') as f:
             for user in self.follow_list:
                 f.write((user['uri'] + ' ' + user['nickname'] + '\n').encode(
                     sys.stdout.encoding))
             for user in self.fans_list:
                 f.write((user['uri'] + ' ' + user['nickname'] + '\n').encode(
                     sys.stdout.encoding))
+        self.rb.set(self.file_redis_key, file_name)
 
     def get_user_list(self, file_name):
         """获取文件中的微博id信息"""
@@ -187,8 +194,8 @@ class Follow(object):
             for user_id in self.user_id_list:
                 self.initialize_info(user_id)
                 print('*' * 100)
-                self.get_follow_list()  # 爬取微博信息
-                self.get_fans_list()
+                self.get_follow_list()  # 爬取关注列表
+                self.get_fans_list() # 爬取粉丝列表
                 self.write_to_txt()
                 print(u'信息抓取完毕')
                 print('*' * 100)
