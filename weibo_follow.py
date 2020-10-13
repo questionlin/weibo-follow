@@ -35,6 +35,7 @@ class Follow(object):
         self.user_id = ''
         self.follow_list = []  # 存储爬取到的所有关注微博的uri和用户昵称
         self.fans_list = [] # 存储爬取到的所有粉丝微博的uri和用户昵称
+        self.file_name = 'user_id_list'+str(time())+'.txt'
 
     def validate_config(self, config):
         """验证配置是否正确"""
@@ -152,15 +153,13 @@ class Follow(object):
         print(u'用户粉丝列表爬取完毕')
 
     def write_to_txt(self):
-        file_name = 'user_id_list'+str(time())+'.txt'
-        with open(file_name, 'ab') as f:
+        with open(self.file_name, 'ab') as f:
             for user in self.follow_list:
                 f.write((user['uri'] + ' ' + user['nickname'] + '\n').encode(
                     sys.stdout.encoding))
             for user in self.fans_list:
                 f.write((user['uri'] + ' ' + user['nickname'] + '\n').encode(
                     sys.stdout.encoding))
-        self.rb.set(self.file_redis_key, file_name)
 
     def get_user_list(self, file_name):
         """获取文件中的微博id信息"""
@@ -182,6 +181,7 @@ class Follow(object):
     def initialize_info(self, user_id):
         """初始化爬虫信息"""
         self.follow_list = []
+        self.fans_list = []
         self.user_id = user_id
 
     def check_unique(self, user_id):
@@ -193,12 +193,14 @@ class Follow(object):
         try:
             for user_id in self.user_id_list:
                 self.initialize_info(user_id)
+                print(u'开始抓取：'+user_id)
                 print('*' * 100)
                 self.get_follow_list()  # 爬取关注列表
                 self.get_fans_list() # 爬取粉丝列表
                 self.write_to_txt()
                 print(u'信息抓取完毕')
                 print('*' * 100)
+            self.rb.set(self.file_redis_key, self.file_name)
         except Exception as e:
             print('Error: ', e)
             traceback.print_exc()
