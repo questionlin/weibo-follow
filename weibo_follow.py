@@ -190,20 +190,21 @@ class Follow(object):
 
     def start(self):
         """运行爬虫"""
-        try:
-            for user_id in self.user_id_list:
-                self.initialize_info(user_id)
-                print(u'开始抓取：'+user_id)
-                print('*' * 100)
+        for user_id in self.user_id_list:
+            self.initialize_info(user_id)
+            print(u'开始抓取：'+user_id)
+            print('*' * 100)
+            try:
                 self.get_follow_list()  # 爬取关注列表
                 self.get_fans_list() # 爬取粉丝列表
-                self.write_to_txt()
-                print(u'信息抓取完毕')
-                print('*' * 100)
-            self.rb.set(self.file_redis_key, self.file_name)
-        except Exception as e:
-            print('Error: ', e)
-            traceback.print_exc()
+            except Exception as e:
+                print('Error: ', e)
+                traceback.print_exc()
+                sleep(10) # 如果出错则跳过用户，而不是退出
+            self.write_to_txt()
+            print(u'信息抓取完毕')
+            print('*' * 100)
+        self.rb.set(self.file_redis_key, self.file_name)
 
 
 def main():
