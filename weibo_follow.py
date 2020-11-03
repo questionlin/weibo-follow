@@ -19,10 +19,6 @@ class Follow(object):
         """Follow类初始化"""
         self.rb = Client()
         self.filter_redis_key = 'uidfilter'
-        self.file_redis_key = 'file_name'
-        file_name = self.rb.get(self.file_redis_key)
-        if file_name:
-            config['user_id_list'] = bytes.decode(file_name)
         self.validate_config(config)
         self.cookie = {'Cookie': config['cookie']}
         user_id_list = config['user_id_list']
@@ -204,7 +200,6 @@ class Follow(object):
             self.write_to_txt()
             print(u'信息抓取完毕')
             print('*' * 100)
-        self.rb.set(self.file_redis_key, self.file_name)
 
 
 def main():
